@@ -1,8 +1,9 @@
 {
   "source": "https://www.ateerat.com/",
-  "generated_at_utc": "2026-10-25T13:51:00.758358+00:00",
+  "generated_at_utc": "2026-10-25T15:36:44.190740+00:00",
   "count": 7,
   "publish_enabled": false,
+  "design_version": "ATEERAT-V2",
   "designs": [
     {
       "date": "2026-10-26",
@@ -13,7 +14,8 @@
       "image_file": "cards/01-2026-10-26.png",
       "product_url": "https://www.ateerat.com/shop/perf-016-asad-bourbon-lattafa-perfumes-91",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     },
     {
       "date": "2026-10-27",
@@ -24,7 +26,8 @@
       "image_file": "cards/02-2026-10-27.png",
       "product_url": "https://www.ateerat.com/shop/perf-018-black-cavalier-vi-le-bonheur-perfumes-للرجال-93",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     },
     {
       "date": "2026-10-28",
@@ -35,7 +38,8 @@
       "image_file": "cards/03-2026-10-28.png",
       "product_url": "https://www.ateerat.com/shop/perf-020-terro-pura-95",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     },
     {
       "date": "2026-10-29",
@@ -46,7 +50,8 @@
       "image_file": "cards/04-2026-10-29.png",
       "product_url": "https://www.ateerat.com/shop/perf-022-bentley-for-men-intense-97",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     },
     {
       "date": "2026-10-30",
@@ -57,7 +62,8 @@
       "image_file": "cards/05-2026-10-30.png",
       "product_url": "https://www.ateerat.com/shop/perf-024-prestige-ruby-al-majed-oud-للجنسين-99",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     },
     {
       "date": "2026-10-31",
@@ -68,7 +74,8 @@
       "image_file": "cards/06-2026-10-31.png",
       "product_url": "https://www.ateerat.com/shop/perf-026-franklin-beach-afternoon-101",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     },
     {
       "date": "2026-11-01",
@@ -79,7 +86,8 @@
       "image_file": "cards/07-2026-11-01.png",
       "product_url": "https://www.ateerat.com/shop/perf-028-real-reeve-by-afnan-103",
       "status": "DRAFT_REVIEW",
-      "auto_publish": false
+      "auto_publish": false,
+      "identity_version": "ATEERAT-V2"
     }
   ],
   "rejected_products": [
