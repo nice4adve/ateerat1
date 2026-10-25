@@ -1,4 +1,3 @@
-
 name: Ateerat public catalog sync
 
 on:
@@ -9,51 +8,61 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ateerat-catalog-writer
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
+          cache: pip
 
-      - name: Install Arabic font
+      - name: Verify official Cairo and Ateerat logos
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-dejavu-core
+          test -s 'Cairo-VariableFont_slnt,wght.ttf' || test -s 'assets/ateerat/Cairo-VariableFont_slnt,wght.ttf' || { echo 'Upload your Cairo font beside marketing_cards.py'; exit 1; }
+          test -s logo_navy.png || test -s assets/ateerat/logo_navy.png || exit 1
+          test -s logo_white.png || test -s assets/ateerat/logo_white.png || exit 1
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
-      - name: Sync Ateerat catalog
-        run: |
-          python catalog.py --all --max-products 200 --delay 1 --out data
+      - name: Read fresh Ateerat catalog
+        run: python catalog.py --all --max-products 200 --delay 1 --out data
 
-      - name: Generate marketing drafts
-        run: |
-          python marketing_drafts.py --catalog data/catalog.json --output-dir marketing --count 7
+      - name: Generate review-only marketing drafts
+        run: python marketing_drafts.py --catalog data/catalog.json --output-dir marketing --count 7
 
-      - name: Generate product image cards
-        run: |
-          python marketing_cards.py --catalog data/catalog.json --drafts marketing/drafts.json --out marketing/cards
+      - name: Render new Ateerat identity designs
+        run: python marketing_cards.py --catalog data/catalog.json --drafts marketing/drafts.json --out marketing/cards
 
-      - name: Save catalog and designs
+      - name: Prepare Meta files if stage 4 exists (does NOT publish)
+        if: ${{ hashFiles('meta_publish.py') != '' }}
+        run: python meta_publish.py prepare --manifest marketing/cards_manifest.json --root .
+
+      - name: Save approved-source catalog and review-only cards
         shell: bash
         run: |
-          git config user.name "ateerat-catalog-bot"
-          git config user.email "ateerat-catalog-bot@users.noreply.github.com"
-          git add data/catalog.json data/catalog.csv data/changes.json marketing/drafts.json marketing/drafts.csv marketing/cards marketing/cards_manifest.json marketing/preview.html
+          git config user.name 'ateerat-catalog-bot'
+          git config user.email 'ateerat-catalog-bot@users.noreply.github.com'
+          git add data/catalog.json data/catalog.csv data/changes.json \
+                  marketing/drafts.json marketing/drafts.csv \
+                  marketing/cards marketing/cards_manifest.json marketing/preview.html
+          if [ -d marketing/meta_queue ]; then git add marketing/meta_queue; fi
+          if [ -d marketing/meta_media ]; then git add marketing/meta_media; fi
           if ! git diff --cached --quiet; then
-            git commit -m "Update Ateerat marketing assets"
+            git commit -m 'Update Ateerat branded design drafts'
             git push
           fi
