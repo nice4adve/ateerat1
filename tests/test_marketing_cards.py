@@ -74,7 +74,7 @@ class BrandCardsTests(unittest.TestCase):
               'publish_enabled':False,'drafts':[draft]},ensure_ascii=False),encoding='utf8')
             manifest=mc.build_cards(root/'catalog.json',root/'drafts.json',root/'marketing/cards',
                                     fetch_image=lambda url:Image.new('RGB',(500,800),'#81452D'))
-            self.assertEqual(manifest['design_version'],'ATEERAT-V2')
+            self.assertEqual(manifest['design_version'],'ATEERAT-V3')
             self.assertFalse(manifest['publish_enabled'])
             self.assertEqual(manifest['count'],1)
             self.assertTrue((root/'marketing/cards/01-2026-10-26.png').exists())
