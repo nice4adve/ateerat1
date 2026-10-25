@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ateerat Visual Identity v2: generate REVIEW-ONLY product marketing cards.
+"""Ateerat Visual Identity v3: generate REVIEW-ONLY product marketing cards.
 
 Input comes exclusively from fresh publicly available ateerat.com catalog data.
 The bottle image is downloaded unchanged (except white-photo-background removal
@@ -310,14 +310,27 @@ def fetch_original_photo(url: str, session: requests.Session | None = None) -> I
 
 
 def render_card(product_photo: Image.Image, product_name: str, price: object,
-                save_to: Path) -> None:
+                save_to: Path, background_image: Image.Image | None = None) -> None:
     """Render exact store product image, current price and locked Ateerat identity."""
     name=re.sub(r'\s+',' ',product_name).strip()
     formatted=format_yer(price)
     if not name or not formatted:
         raise ValueError('Name and positive price are required')
     mood=choose_palette(product_photo)
-    canvas=create_background(mood,name)
+    if background_image is None:
+        canvas=create_background(mood,name)
+    else:
+        # The generated image is ALWAYS background-only: the actual bottle is
+        # composited unaltered from the official store photo in the next step.
+        canvas=ImageOps.fit(background_image.convert('RGBA'), SIZE,
+                            method=Image.Resampling.LANCZOS)
+        # Darken top so the official Cairo title/logo remain legible.
+        veil=Image.new('RGBA', SIZE, (0, 0, 0, 0))
+        vd=ImageDraw.Draw(veil)
+        for y in range(0,400,4):
+            alpha=max(0,round(110*(1-y/400)))
+            vd.rectangle((0,y,SIZE[0],y+3),fill=(5,15,29,alpha))
+        canvas.alpha_composite(veil)
     _place_bottle(canvas, product_photo)
     d=ImageDraw.Draw(canvas)
     # Small upper-left official white logo on dark background.
@@ -378,8 +391,45 @@ def require_valid_draft(draft: dict, catalog_by_url: dict) -> dict:
     return product
 
 
+def read_creative_background(manifest_file: Path, product: dict,
+                             draft: dict) -> Image.Image | None:
+    """Use AI scenery only when manifest is review-only and matches exact bottle.
+
+    Any missing or invalid scenery falls back to the original V2 palette safely.
+    """
+    if not manifest_file.is_file():
+        return None
+    try:
+        doc=json.loads(manifest_file.read_text(encoding='utf-8'))
+        if doc.get('source')!='https://www.ateerat.com/' or doc.get('publish_enabled') is not False:
+            return None
+        for bg in doc.get('backgrounds',[]):
+            if bg.get('product_url')!=product['url'] or bg.get('image_url')!=product['image_url']:
+                continue
+            if bg.get('product_name')!=product['name']:
+                continue
+            rel=bg.get('background_file','')
+            if not isinstance(rel,str) or not re.fullmatch(r'creative_backgrounds/[a-f0-9]{20}\.jpg',rel):
+                continue
+            path=(manifest_file.parent/rel).resolve()
+            if not path.is_relative_to((manifest_file.parent/'creative_backgrounds').resolve()):
+                continue
+            if not path.is_file() or path.stat().st_size < 6000:
+                continue
+            with Image.open(path) as img:
+                img.verify()
+            with Image.open(path) as img:
+                if img.size != SIZE:
+                    continue
+                return img.convert('RGB')
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return None
+    return None
+
+
 def build_cards(catalog: Path, drafts_file: Path, out: Path,
-                fetch_image=fetch_original_photo) -> dict:
+                fetch_image=fetch_original_photo,
+                creative_manifest: Path | None = None) -> dict:
     valid, rejected=load_catalog(catalog)
     lookup={p['url']:p for p in valid}
     obj=json.loads(drafts_file.read_text(encoding='utf8'))
@@ -394,22 +444,26 @@ def build_cards(catalog: Path, drafts_file: Path, out: Path,
         if not (ASSETS/name).is_file():
             raise FileNotFoundError(f'Missing official logo: {name} (repository root or assets/ateerat)')
     out.mkdir(parents=True,exist_ok=True)
+    if creative_manifest is None:
+        creative_manifest=out.parent/'creative_backgrounds_manifest.json'
     items=[]
     for i,draft in enumerate(drafts,start=1):
         product=require_valid_draft(draft,lookup)
         filename=f"{i:02d}-{draft['date']}.png"
         photo=fetch_image(product['image_url'])
-        render_card(photo,product['name'],product['price'],out/filename)
+        bg=read_creative_background(creative_manifest,product,draft)
+        render_card(photo,product['name'],product['price'],out/filename,background_image=bg)
         items.append({'date':draft['date'],'product':product['name'],
                      'price':product['price'],'currency':'YER',
                      'caption_ar':draft.get('caption_ar',''),
                      'image_file':'cards/'+filename,'product_url':product['url'],
                      'status':'DRAFT_REVIEW','auto_publish':False,
-                     'identity_version':'ATEERAT-V2'})
+                     'identity_version':'ATEERAT-V3',
+                     'background_mode':'AI-CINEMATIC' if bg is not None else 'V2-ABSTRACT-FALLBACK'})
     manifest={'source':'https://www.ateerat.com/',
               'generated_at_utc':dt.datetime.now(dt.timezone.utc).isoformat(),
               'count':len(items),'publish_enabled':False,
-              'design_version':'ATEERAT-V2','designs':items,'rejected_products':rejected}
+              'design_version':'ATEERAT-V3','designs':items,'rejected_products':rejected}
     (out.parent/'cards_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf8')
     articles=[]
     for item in items:
@@ -432,12 +486,14 @@ def build_cards(catalog: Path, drafts_file: Path, out: Path,
 
 
 def main() -> None:
-    p=argparse.ArgumentParser(description='Ateerat Cairo+logo branded ad renderer')
+    p=argparse.ArgumentParser(description='Ateerat V3 cinematic background + official product Cairo renderer')
     p.add_argument('--catalog',default='data/catalog.json')
     p.add_argument('--drafts',default='marketing/drafts.json')
     p.add_argument('--out',default='marketing/cards')
+    p.add_argument('--creative-manifest',default='marketing/creative_backgrounds_manifest.json')
     a=p.parse_args()
-    build_cards(Path(a.catalog),Path(a.drafts),Path(a.out))
+    build_cards(Path(a.catalog),Path(a.drafts),Path(a.out),
+                creative_manifest=Path(a.creative_manifest))
 
 
 if __name__=='__main__':

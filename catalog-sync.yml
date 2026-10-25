@@ -1,0 +1,81 @@
+name: Ateerat public catalog sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 6 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ateerat-catalog-writer
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Verify official Cairo and Ateerat logos
+        shell: bash
+        run: |
+          test -s 'Cairo-VariableFont_slnt,wght.ttf' || test -s 'assets/ateerat/Cairo-VariableFont_slnt,wght.ttf' || { echo 'Upload your Cairo font beside marketing_cards.py'; exit 1; }
+          test -s logo_navy.png || test -s assets/ateerat/logo_navy.png || exit 1
+          test -s logo_white.png || test -s assets/ateerat/logo_white.png || exit 1
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Read fresh Ateerat catalog
+        run: python catalog.py --all --max-products 200 --delay 1 --out data
+
+      - name: Generate review-only marketing drafts
+        run: python marketing_drafts.py --catalog data/catalog.json --output-dir marketing --count 7
+
+      # IMPORTANT: This optional step incurs image API fees. The repository
+      # variable must be explicitly set to true. No automatic publishing.
+      - name: Create one cinematic AI background if explicitly enabled
+        if: ${{ vars.ATEERAT_CREATIVE_AI_ENABLED == 'true' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          test -n "$OPENAI_API_KEY" || { echo 'Missing OPENAI_API_KEY repository secret'; exit 1; }
+          python creative_backgrounds.py --catalog data/catalog.json --drafts marketing/drafts.json --out marketing/creative_backgrounds --max-new 1 --quality medium
+
+      - name: Render Ateerat official-product designs (AI if available, otherwise V2)
+        run: |
+          python marketing_cards.py --catalog data/catalog.json --drafts marketing/drafts.json --out marketing/cards --creative-manifest marketing/creative_backgrounds_manifest.json
+
+      - name: Prepare Meta files if stage 4 exists (does NOT publish)
+        if: ${{ hashFiles('meta_publish.py') != '' }}
+        run: python meta_publish.py prepare --manifest marketing/cards_manifest.json --root .
+
+      - name: Save review-only catalog, drafts and cinematic designs
+        shell: bash
+        run: |
+          git config user.name 'ateerat-catalog-bot'
+          git config user.email 'ateerat-catalog-bot@users.noreply.github.com'
+          git add data/catalog.json data/catalog.csv data/changes.json \
+                  marketing/drafts.json marketing/drafts.csv \
+                  marketing/cards marketing/cards_manifest.json marketing/preview.html
+          if [ -d marketing/creative_backgrounds ]; then git add marketing/creative_backgrounds; fi
+          if [ -f marketing/creative_backgrounds_manifest.json ]; then git add marketing/creative_backgrounds_manifest.json; fi
+          if [ -d marketing/meta_queue ]; then git add marketing/meta_queue; fi
+          if [ -d marketing/meta_media ]; then git add marketing/meta_media; fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update Ateerat review-only cinematic drafts'
+            git push
+          fi
